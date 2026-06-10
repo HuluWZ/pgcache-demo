@@ -1,0 +1,45 @@
+services:
+  postgres:
+    image: postgres:17
+    shm_size: '256mb'
+    environment:
+      POSTGRES_USER: demo
+      POSTGRES_PASSWORD: demo
+      POSTGRES_DB: demodb
+    command:
+      - postgres
+      - -c
+      - wal_level=logical
+      - -c
+      - max_replication_slots=5
+      - -c
+      - max_wal_senders=5
+    ports:
+      - "5433:5432"
+    volumes:
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U demo -d demodb"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  pgcache:
+    image: pgcache/pgcache
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      UPSTREAM_URL: postgres://demo:demo@postgres:5432/demodb
+    ports:
+      - "5432:5432"
+    restart: on-failure
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h localhost -p 5432 -U demo"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  postgres_data:
