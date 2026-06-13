@@ -36,6 +36,10 @@ services:
       UPSTREAM_URL: postgres://${POSTGRES_USER:-demo}:${POSTGRES_PASSWORD:-demo}@postgres:5432/${POSTGRES_DB:-demodb}
       REPLICATION_PASSWORD: ${POSTGRES_PASSWORD:-demo}
       METRICS_PORT: "9090"
+      PGCACHE_TELEMETRY: ${PGCACHE_TELEMETRY:-off}
+      # Semicolon-separated queries PgCache validates and populates at startup,
+      # so the cache is warm before the first client connects (no app-side warmup).
+      PINNED_QUERIES: ${PGCACHE_PINNED_QUERIES:-}
     ports:
       - "${PROXY_PORT:-5432}:5432"
       - "${METRICS_PORT:-9090}:9090"

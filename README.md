@@ -11,7 +11,7 @@ the cache.
 
 ## Architecture
 
-```
+```text
                           app/ (TypeScript: benchmark.ts, cdc-demo.ts)
                                           │
                     proxy :5432           │           origin :5433
@@ -93,10 +93,10 @@ Measured locally on PgCache `0.6.0-arm64`, Postgres 17, dataset of 1M users /
 
 | Query | Origin p50 | Proxy p50 | Speedup p50 | Origin p99 | Proxy p99 | Speedup p99 |
 |-------|-----------:|----------:|------------:|-----------:|----------:|------------:|
-| `point_lookup` | 0.4 ms | 0.3 ms | 1.1x | 1.7 ms | 6.7 ms | 0.3x |
-| `tier_aggregate` | 133 ms | 0.5 ms | 274x | 193 ms | 1.2 ms | 161x |
-| `revenue_by_country` | 1274 ms | 0.5 ms | 2391x | 1606 ms | 2.5 ms | 648x |
-| `top_products` | 3441 ms | 0.8 ms | 4135x | 4237 ms | 4.4 ms | 965x |
+| `point_lookup` | 0.5 ms | 0.4 ms | 1.4x | 4.2 ms | 3.4 ms | 1.3x |
+| `tier_aggregate` | 150 ms | 0.5 ms | 302x | 194 ms | 1.0 ms | 200x |
+| `revenue_by_country` | 1252 ms | 0.5 ms | 2356x | 1648 ms | 2.3 ms | 724x |
+| `top_products` | 2703 ms | 0.6 ms | 4434x | 3107 ms | 1.3 ms | 2318x |
 
 The cache earns its keep on expensive aggregates and joins. For `point_lookup`,
 the origin is already sub-millisecond, so routing through the proxy adds a hop
@@ -109,7 +109,7 @@ does *not* pay off.
 to the origin** (bypassing the proxy), then polls the proxy until the cached
 result reflects the change:
 
-```
+```text
 Cached count (enterprise users via proxy): 166,666
 Inserted directly to origin: cdc_demo_...@test.com
 Propagated in ≤94ms
@@ -131,6 +131,8 @@ Both `docker-compose.yml` and the app read from a single repo-root `.env`
 |----------|---------|---------|
 | `PGCACHE_IMAGE` | `pgcache/pgcache:0.6.0-arm64` | Proxy image/tag (use `-amd64` on Intel/AMD) |
 | `PGCACHE_SHM_SIZE` | `4gb` | `/dev/shm` for the proxy; must exceed 2x its shared_buffers |
+| `PGCACHE_TELEMETRY` | `off` | Anonymous usage telemetry (`off` for clean benchmarking) |
+| `PGCACHE_PINNED_QUERIES` | the 3 aggregates | Semicolon-separated queries warmed at startup; empty disables |
 | `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | `demo` / `demo` / `demodb` | Origin credentials |
 | `PROXY_PORT` | `5432` | Host port for the PgCache proxy |
 | `ORIGIN_PORT` | `5433` | Host port for the origin Postgres |
@@ -149,10 +151,16 @@ Both `docker-compose.yml` and the app read from a single repo-root `.env`
   from the origin; it never serves stale data. The replication slot persists on
   the origin if PgCache stops ungracefully — drop `pgcache_slot` manually if you
   tear the proxy down for good.
+- **Startup warming.** The three aggregate queries are listed in
+  `PGCACHE_PINNED_QUERIES`, so PgCache validates and populates them at startup;
+  the first client query of those shapes is already a cache hit. Clear the
+  variable to disable. The parameterized `point_lookup` is not pinnable.
+- **Telemetry.** PgCache sends anonymous usage telemetry by default; this demo
+  sets `PGCACHE_TELEMETRY=off` for clean, reproducible runs.
 
 ## Project layout
 
-```
+```text
 .
 ├── docker-compose.yml     # Postgres 17 origin + PgCache proxy
 ├── .env.example           # configuration template
@@ -169,7 +177,7 @@ Both `docker-compose.yml` and the app read from a single repo-root `.env`
 
 ## Makefile helpers
 
-```
+```text
 make up           # docker compose up -d
 make down         # docker compose down
 make reset        # down -v + up (wipes the data volume, re-seeds)
