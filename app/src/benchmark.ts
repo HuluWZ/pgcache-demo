@@ -1,4 +1,4 @@
-import { ALL_QUERIES, makePool, Query } from "./queries";
+import { ALL_QUERIES, makeOriginPool, makeProxyPool, ORIGIN_PORT, PROXY_PORT, Query } from "./queries";
 import { Pool } from "pg";
 
 const CONCURRENCY = 10;
@@ -102,11 +102,11 @@ async function benchmarkQuery(
 }
 
 async function main(): Promise<void> {
-  const originPool = makePool("localhost", 5433);
-  const proxyPool = makePool("localhost", 5432);
+  const originPool = makeOriginPool();
+  const proxyPool = makeProxyPool();
 
   console.log("═══════════════════════════════════════════════════════════════════════════");
-  console.log(" PgCache Benchmark — origin (port 5433) vs proxy/cache (port 5432)");
+  console.log(` PgCache Benchmark — origin (port ${ORIGIN_PORT}) vs proxy/cache (port ${PROXY_PORT})`);
   console.log(` Concurrency: ${CONCURRENCY}  Iterations: ${ITERATIONS}  Warmup runs: ${WARMUP_RUNS}`);
   console.log("═══════════════════════════════════════════════════════════════════════════");
 

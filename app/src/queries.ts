@@ -1,4 +1,13 @@
 import { Pool, PoolClient } from "pg";
+import * as path from "path";
+import * as dotenv from "dotenv";
+
+// One source of truth: the repo-root .env that docker-compose also reads.
+dotenv.config({ path: path.resolve(__dirname, "../../.env") });
+
+export const PGHOST = process.env.PGHOST ?? "localhost";
+export const ORIGIN_PORT = parseInt(process.env.ORIGIN_PORT ?? "5433", 10);
+export const PROXY_PORT = parseInt(process.env.PROXY_PORT ?? "5432", 10);
 
 export interface Query {
   name: string;
@@ -80,9 +89,12 @@ export function makePool(host: string, port: number): Pool {
   return new Pool({
     host,
     port,
-    user: "demo",
-    password: "demo",
-    database: "demodb",
+    user: process.env.POSTGRES_USER ?? "demo",
+    password: process.env.POSTGRES_PASSWORD ?? "demo",
+    database: process.env.POSTGRES_DB ?? "demodb",
     max: 50,
   });
 }
+
+export const makeOriginPool = (): Pool => makePool(PGHOST, ORIGIN_PORT);
+export const makeProxyPool = (): Pool => makePool(PGHOST, PROXY_PORT);

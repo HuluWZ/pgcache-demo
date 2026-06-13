@@ -2,3 +2,5 @@ node_modules/
 dist/
 *.js.map
 .env
+docs/
+.DS_Store

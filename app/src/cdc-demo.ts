@@ -1,4 +1,4 @@
-import { makePool } from "./queries";
+import { makeOriginPool, makeProxyPool } from "./queries";
 
 const POLL_INTERVAL_MS = 50;
 const MAX_WAIT_MS = 5000;
@@ -8,8 +8,8 @@ async function sleep(ms: number): Promise<void> {
 }
 
 async function main(): Promise<void> {
-  const originPool = makePool("localhost", 5433);
-  const proxyPool = makePool("localhost", 5432);
+  const originPool = makeOriginPool();
+  const proxyPool = makeProxyPool();
 
   console.log("═══════════════════════════════════════════════════════════════");
   console.log(" PgCache CDC (Change Data Capture) Invalidation Demo");

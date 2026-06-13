@@ -1,0 +1,50 @@
+[
+  {
+    "query": "point_lookup",
+    "description": "SELECT user by ID (10-ID pool, tests repeated cache hits)",
+    "origin_p50_ms": 0.3588330000000042,
+    "origin_p95_ms": 0.7447920000000181,
+    "origin_p99_ms": 1.7451249999999732,
+    "proxy_p50_ms": 0.3328339999999912,
+    "proxy_p95_ms": 1.2839589999999816,
+    "proxy_p99_ms": 6.7402079999999955,
+    "p50_speedup": 1.08,
+    "p99_speedup": 0.26
+  },
+  {
+    "query": "tier_aggregate",
+    "description": "COUNT users grouped by tier (aggregate over 1M rows)",
+    "origin_p50_ms": 133.04312500000015,
+    "origin_p95_ms": 177.47891700000037,
+    "origin_p99_ms": 193.2866670000003,
+    "proxy_p50_ms": 0.4859579999993002,
+    "proxy_p95_ms": 0.8927920000005543,
+    "proxy_p99_ms": 1.2023329999992711,
+    "p50_speedup": 273.77,
+    "p99_speedup": 160.76
+  },
+  {
+    "query": "revenue_by_country",
+    "description": "SUM revenue joined across users + orders (5M row JOIN)",
+    "origin_p50_ms": 1273.6077499999956,
+    "origin_p95_ms": 1561.6974169999958,
+    "origin_p99_ms": 1605.6198749999967,
+    "proxy_p50_ms": 0.5326659999991534,
+    "proxy_p95_ms": 1.584499999997206,
+    "proxy_p99_ms": 2.4784580000050482,
+    "p50_speedup": 2391.01,
+    "p99_speedup": 647.83
+  },
+  {
+    "query": "top_products",
+    "description": "Top products by order volume per category (JOIN order_items → products)",
+    "origin_p50_ms": 3441.067624999996,
+    "origin_p95_ms": 4176.4599159999925,
+    "origin_p99_ms": 4236.656292,
+    "proxy_p50_ms": 0.8320830000157002,
+    "proxy_p95_ms": 3.070584000000963,
+    "proxy_p99_ms": 4.390707999991719,
+    "p50_speedup": 4135.49,
+    "p99_speedup": 964.91
+  }
+]

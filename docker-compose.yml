@@ -3,9 +3,9 @@ services:
     image: postgres:17
     shm_size: '256mb'
     environment:
-      POSTGRES_USER: demo
-      POSTGRES_PASSWORD: demo
-      POSTGRES_DB: demodb
+      POSTGRES_USER: ${POSTGRES_USER:-demo}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-demo}
+      POSTGRES_DB: ${POSTGRES_DB:-demodb}
     command:
       - postgres
       - -c
@@ -15,28 +15,33 @@ services:
       - -c
       - max_wal_senders=5
     ports:
-      - "5433:5432"
+      - "${ORIGIN_PORT:-5433}:5432"
     volumes:
-      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./db/00_hba.sh:/docker-entrypoint-initdb.d/00_hba.sh
+      - ./db/init.sql:/docker-entrypoint-initdb.d/01_init.sql
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U demo -d demodb"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-demo} -d ${POSTGRES_DB:-demodb}"]
       interval: 5s
       timeout: 5s
       retries: 10
 
   pgcache:
-    image: pgcache/pgcache
+    image: ${PGCACHE_IMAGE:-pgcache/pgcache:0.6.0-arm64}
+    shm_size: ${PGCACHE_SHM_SIZE:-4gb}
     depends_on:
       postgres:
         condition: service_healthy
     environment:
-      UPSTREAM_URL: postgres://demo:demo@postgres:5432/demodb
+      UPSTREAM_URL: postgres://${POSTGRES_USER:-demo}:${POSTGRES_PASSWORD:-demo}@postgres:5432/${POSTGRES_DB:-demodb}
+      REPLICATION_PASSWORD: ${POSTGRES_PASSWORD:-demo}
+      METRICS_PORT: "9090"
     ports:
-      - "5432:5432"
+      - "${PROXY_PORT:-5432}:5432"
+      - "${METRICS_PORT:-9090}:9090"
     restart: on-failure
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -h localhost -p 5432 -U demo"]
+      test: ["CMD-SHELL", "pg_isready -h localhost -p 5432 -U ${POSTGRES_USER:-demo} -d ${POSTGRES_DB:-demodb}"]
       interval: 5s
       timeout: 5s
       retries: 20

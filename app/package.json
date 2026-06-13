@@ -6,6 +6,7 @@
     "cdc-demo": "ts-node src/cdc-demo.ts"
   },
   "dependencies": {
+    "dotenv": "^16.6.1",
     "pg": "^8.13.3"
   },
   "devDependencies": {
