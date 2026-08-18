@@ -87,16 +87,20 @@ concurrency 10 against both targets and reports p50/p95/p99.
 
 ## Results
 
-Measured locally on PgCache `0.6.0-arm64`, Postgres 17, dataset of 1M users /
+Measured locally on PgCache `0.6.2-arm64`, Postgres 17, dataset of 1M users /
 2K products / 5M orders / 10M order_items. Full machine-readable output is in
 [app/results.json](app/results.json).
 
 | Query | Origin p50 | Proxy p50 | Speedup p50 | Origin p99 | Proxy p99 | Speedup p99 |
 |-------|-----------:|----------:|------------:|-----------:|----------:|------------:|
-| `point_lookup` | 0.5 ms | 0.4 ms | 1.4x | 4.2 ms | 3.4 ms | 1.3x |
-| `tier_aggregate` | 150 ms | 0.5 ms | 302x | 194 ms | 1.0 ms | 200x |
-| `revenue_by_country` | 1252 ms | 0.5 ms | 2356x | 1648 ms | 2.3 ms | 724x |
-| `top_products` | 2703 ms | 0.6 ms | 4434x | 3107 ms | 1.3 ms | 2318x |
+| `point_lookup` | 0.5 ms | 0.5 ms | 0.9x | 2.6 ms | 1.9 ms | 1.4x |
+| `tier_aggregate` | 153 ms | 0.5 ms | 299x | 259 ms | 1.2 ms | 208x |
+| `revenue_by_country` | 1496 ms | 0.6 ms | 2419x | 1861 ms | 2.3 ms | 823x |
+| `top_products` | 3060 ms | 0.7 ms | 4457x | 3495 ms | 1.5 ms | 2291x |
+
+Query latencies are consistent with the earlier 0.6.0 run within normal
+run-to-run noise — the caching/serving path hasn't changed materially between
+0.6.0 and 0.6.2.
 
 The cache earns its keep on expensive aggregates and joins. For `point_lookup`,
 the origin is already sub-millisecond, so routing through the proxy adds a hop
@@ -117,10 +121,29 @@ Count before: 166,666
 Count after:  166,667 (+1)
 ```
 
-Propagation is consistently under ~100 ms on this setup. PgCache keeps the cached
-aggregate correct under all write paths — including `DELETE`s issued through the
-proxy — on 0.6.0. (An earlier 0.5.0 build left proxy-side `DELETE`s stale on
-cached aggregates; 0.6.0 is required.)
+Propagation on 0.6.2 is fast and reliable **in steady state**, matching the
+~100ms figure above — but two caveats surfaced under closer testing across
+INSERT/UPDATE/DELETE (full methodology and data in
+[PGCACHE-0.6.2-FINDINGS.md](PGCACHE-0.6.2-FINDINGS.md)):
+
+- **Right after `docker compose up`/restart**, while PgCache is still
+  populating the pinned aggregate/join queries in the background (~90s on
+  this dataset), invalidation latency is consistently ~7-8s instead of
+  ~100ms — long enough to blow through `cdc-demo`'s 5s timeout every time.
+  It's not flaky, just uniformly slow until population finishes; give it
+  ~90s after startup before trusting a latency number.
+- **DELETE has an intermittent tail**: across 18 steady-state DELETE runs,
+  invalidation was fast (82–370ms) in 17 and failed to propagate within 10s
+  — on both a warm connection and a brand-new one simultaneously — in 1. We
+  didn't isolate a root cause; treat DELETE-heavy workloads as needing their
+  own verification rather than assuming INSERT/UPDATE's reliability carries
+  over.
+
+PgCache keeps the cached aggregate correct under all write paths — including
+`DELETE`s issued through the proxy — as of 0.6.0. (An earlier 0.5.0 build left
+proxy-side `DELETE`s stale on cached aggregates; this note is carried over from
+the original 0.6.0 testing and wasn't independently re-verified against 0.5.0
+for this update — treat it as unconfirmed if it matters to you.)
 
 ## Configuration
 
@@ -129,10 +152,12 @@ Both `docker-compose.yml` and the app read from a single repo-root `.env`
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `PGCACHE_IMAGE` | `pgcache/pgcache:0.6.0-arm64` | Proxy image/tag (use `-amd64` on Intel/AMD) |
+| `PGCACHE_IMAGE` | `pgcache/pgcache:0.6.2-arm64` | Proxy image/tag (use `-amd64` on Intel/AMD) |
 | `PGCACHE_SHM_SIZE` | `4gb` | `/dev/shm` for the proxy; must exceed 2x its shared_buffers |
 | `PGCACHE_TELEMETRY` | `off` | Anonymous usage telemetry (`off` for clean benchmarking) |
 | `PGCACHE_PINNED_QUERIES` | the 3 aggregates | Semicolon-separated queries warmed at startup; empty disables |
+| `PGCACHE_MEMORY_LIMIT` | unset (80% of RAM) | Optional absolute cap (bytes) on PgCache's process memory, added in 0.6.0 |
+| `PGCACHE_DISK_LIMIT` | unset (auto from free space) | Optional cap (bytes) on the cache volume, added in 0.6.1; replaces the removed `cache_size` setting |
 | `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | `demo` / `demo` / `demodb` | Origin credentials |
 | `PROXY_PORT` | `5432` | Host port for the PgCache proxy |
 | `ORIGIN_PORT` | `5433` | Host port for the origin Postgres |
