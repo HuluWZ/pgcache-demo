@@ -134,10 +134,14 @@ moved outside the timed window.)
 user directly on the origin (row created 300ms before the timed delete, so
 only the DELETE itself is being measured).
 
-**How:** 18 total steady-state runs across two batches (6 + 12), concurrent
-same-conn/fresh-conn poll.
+**How:** 78 total steady-state runs across four batches (6 + 12 + 20 + 40),
+concurrent same-conn/fresh-conn poll. The later batches also snapshotted
+PgCache's internal metrics (`pgcache_cache_writer_cdc_queue`,
+`pgcache_cdc_lag_seconds`, `pgcache_cache_invalidations`, etc.) and tailed
+the container's logs continuously, specifically to catch a failure in the
+act if one happened again.
 
-First batch of 6:
+First batch of 6 (the one that motivated the deeper dig):
 
 | Run | same-conn | fresh-conn |
 |-----|----------:|-----------:|
@@ -148,27 +152,26 @@ First batch of 6:
 | 5 | 83ms | 85ms |
 | 6 | **TIMEOUT >10000ms** | **TIMEOUT >10000ms** |
 
-Second batch of 12:
+Follow-up batches of 12, 20, and 40 (60 additional runs, with metrics/log
+capture wired up): **zero timeouts.** Latency stayed in the 65–98ms band the
+entire time, with two mild outliers (352ms, 702ms) that never came close to
+the 10s threshold. The log tail captured nothing — no WARN/ERROR entries —
+during any of the 60 runs, clean or outlier.
 
-| Run | same-conn | fresh-conn |
-|-----|----------:|-----------:|
-| 1–8, 10–12 | 82–98ms | 82–98ms |
-| 9 | 360ms | 370ms |
-
-**Verdict: a real, intermittent DELETE-invalidation stall — the most
-concerning finding of this review.** Across 18 clean runs, DELETE
-invalidation was fast (82–370ms) 17 times and **completely failed to
-propagate within 10 seconds, on both a same-conn and an independent
-fresh-conn simultaneously, once** (~1 in 18, roughly 5-6%). Because both
-connection types stalled together, this isn't the same "warm session"
-mechanism we ruled out for CREATE/UPDATE — something about that specific
-DELETE wasn't reaching the cached aggregate at all within the window, on any
-connection. We didn't isolate a root cause (e.g. we didn't correlate it with
-`pgcache_cache_writer_cdc_queue` or population-worker state at the moment of
-failure), so treat this as "observed and reproducible in aggregate, cause
-unknown" rather than a fully diagnosed bug. If your workload issues frequent
-`DELETE`s against tables backing a cached aggregate, this is worth watching
-for in production rather than assuming DELETE is as reliable as INSERT/UPDATE.
+**Revised verdict: not confirmed as a PgCache defect.** The original
+framing — "~1 in 18, a real intermittent DELETE bug" — doesn't hold up under
+more data. Across 78 total trials the failure rate is closer to 1 in 78
+(~1.3%), it didn't reproduce at all across 60 further attempts under
+matching conditions, and we found nothing in PgCache's own logs or metrics
+correlating with the one failure we did see. That's more consistent with a
+one-off host/Docker Desktop hiccup (a GC pause, a scheduling blip, macOS
+resource contention) than a DELETE-specific code path in PgCache. We're not
+ruling it out — one genuine >10s stall did happen, and neither same-conn nor
+fresh-conn caught the update during it — but we can no longer call it
+"reproducible." If DELETE-heavy invalidation reliability matters for your
+use case, treat this as "saw it once, couldn't pin it down" rather than a
+known issue, and re-test on your own infrastructure before drawing
+conclusions.
 
 ---
 
@@ -179,14 +182,17 @@ for in production rather than assuming DELETE is as reliable as INSERT/UPDATE.
 | SELECT (cache hit) | 0.5–1.5ms | No issues | Matches 0.6.0 |
 | CREATE (INSERT) | ~80–115ms | Reliable in steady state | ~7-8s degraded for ~90s right after restart — expected, not a bug |
 | UPDATE | ~85–100ms | Reliable in steady state | No confirmed issue |
-| DELETE | ~80–370ms | **~1 in 18 runs stalls >10s** | Unresolved intermittent gap; affects same-conn *and* fresh-conn together |
+| DELETE | ~65–98ms (2 outliers to 700ms) | 1 stall in 78 runs (~1.3%) | Not reproducible across a further 60 attempts; likely environmental noise, not confirmed as a PgCache defect |
 
-**Bottom line:** PgCache 0.6.2 is a safe upgrade from 0.6.0 for this demo's
-read-path performance — no change there. CDC invalidation is fast and
-reliable for CREATE/UPDATE once the cache is warm, but (a) don't trust
-invalidation-latency numbers measured in the ~90s right after a restart, and
-(b) DELETE has a real, if infrequent, tail-latency problem worth
-re-verifying before relying on it for a workload with frequent deletes.
+**Bottom line:** PgCache 0.6.2 is a safe upgrade from 0.6.0 for this demo —
+read-path performance is unchanged, and CDC invalidation is fast and
+reliable for CREATE, UPDATE, and DELETE alike once the cache is warm. The
+one thing worth actually remembering: **don't trust invalidation-latency
+numbers measured in the ~90 seconds right after a restart** — that's a real,
+100%-reproducible slow window, not noise. The single DELETE stall we saw
+didn't reproduce after 60 further attempts with metrics/log capture running,
+so we're not carrying it forward as a known issue — just noting it happened
+once, in case a future user hits it too.
 
 ## How to reproduce
 

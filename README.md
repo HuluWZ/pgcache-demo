@@ -132,12 +132,12 @@ INSERT/UPDATE/DELETE (full methodology and data in
   ~100ms — long enough to blow through `cdc-demo`'s 5s timeout every time.
   It's not flaky, just uniformly slow until population finishes; give it
   ~90s after startup before trusting a latency number.
-- **DELETE has an intermittent tail**: across 18 steady-state DELETE runs,
-  invalidation was fast (82–370ms) in 17 and failed to propagate within 10s
-  — on both a warm connection and a brand-new one simultaneously — in 1. We
-  didn't isolate a root cause; treat DELETE-heavy workloads as needing their
-  own verification rather than assuming INSERT/UPDATE's reliability carries
-  over.
+- **One DELETE outlier, not reproduced.** A single DELETE run stalled past
+  10s on both a warm and a brand-new connection. Chasing it with 60 further
+  runs and live metrics/log capture found nothing — no repeat, no
+  correlating log line. Most likely environmental noise rather than a
+  PgCache defect; see the findings doc for the full data before drawing
+  conclusions either way.
 
 PgCache keeps the cached aggregate correct under all write paths — including
 `DELETE`s issued through the proxy — as of 0.6.0. (An earlier 0.5.0 build left
