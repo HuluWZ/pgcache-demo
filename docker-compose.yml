@@ -27,7 +27,7 @@ services:
       retries: 10
 
   pgcache:
-    image: ${PGCACHE_IMAGE:-pgcache/pgcache:0.6.0-arm64}
+    image: ${PGCACHE_IMAGE:-pgcache/pgcache:0.6.2-arm64}
     shm_size: ${PGCACHE_SHM_SIZE:-4gb}
     depends_on:
       postgres:
